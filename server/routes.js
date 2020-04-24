@@ -2,7 +2,42 @@ var config = require('./db-config.js');
 var mysql = require('mysql');
 
 config.connectionLimit = 10;
-var connection = mysql.createPool(config);
+var connection = mysql.createConnection(config);
+
+connection.connect(function(res, err) {
+  if (err) {
+    console.error('Database connection failed: ' + err.stack);
+    return;
+  }
+
+  console.log('Connected to database.');
+  connection.end();
+});
+
+/*var connection = mysql.createPool(config);
+
+var query = `
+SELECT CITY
+FROM AIRPORT
+LIMIT 5
+`
+
+connection.query(query, function(err, rows, fields) {
+  if (err) console.log(err);
+  else {
+    console.log("HIASDOAOSDKOASKDKAOSDKOASKD");
+    console.log(rows);
+    res.json(rows);
+  }
+});*/
+
+/*var connection = mysql.createPool({
+  host     : "cis550example.cjzd6dnb6pnw.us-east-1.rds.amazonaws.com",
+  user     : "admin",
+  password : "adminpassword",
+  port     : "1521",
+  database : "TESTDB"
+});*/
 
 /* -------------------------------------------------- */
 /* ------------------- Route Handlers --------------- */
@@ -11,7 +46,7 @@ var connection = mysql.createPool(config);
 
 function getCheapestFlightsOutOfCity(req, res) {
   // TODO: replace with real query
-  var query = `
+  /*var query = `
     WITH temp AS (
       SELECT movie_id, COUNT(genre) AS count
       FROM Genres
@@ -37,12 +72,18 @@ function getCheapestFlightsOutOfCity(req, res) {
     )
     ORDER BY b.rating DESC, b.vote_count DESC
     LIMIT 5
-  `;
+  `;*/
+  var query = `
+  SELECT CITY
+  FROM AIRPORT
+  LIMIT 5
+  `
   connection.query(query, function(err, rows, fields) {
     if (err) console.log(err);
     else {
       console.log(rows);
       res.json(rows);
+      connection.release();
     }
   });
 };
