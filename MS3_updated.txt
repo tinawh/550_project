@@ -1,0 +1,219 @@
+Query 1.
+Description: What are the top 10 cheapest, nonbulk return flights between a pair of cities in a given year/quarter?
+Contribution: Tianze Chris Yi
+
+WITH rt_fares AS (
+SELECT ItinFare, RPCarrier AS outbound_carrier, NULL AS inbound_carrier, is_roundtrip
+FROM flight_itinerary
+WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+AND dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.destination_city})
+AND is_roundtrip
+AND NOT is_bulkfare
+AND year = ${req.param.year}
+AND quarter = ${req.param.quarter}
+),
+ow_fares AS (
+SELECT ItinFare, RPCarrier, is_roundtrip
+FROM flight_itinerary
+WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+AND dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.destination_city})
+AND NOT is_roundtrip
+AND NOT is_bulkfare
+AND year = ${req.param.year}
+AND quarter = ${req.param.quarter}
+),
+ow_rt_fares AS (
+SELECT (a.ItinFare + b.ItinFare) AS ItinFare, a.RPCarrier AS outbound_carrier, b.RPCarrier AS inbound_carrier, a.is_roundtrip
+FROM flight_itinerary a, ow_fares b
+WHERE dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+AND origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.destination_city})
+AND NOT is_roundtrip
+AND NOT is_bulkfare
+AND year = ${req.param.year}
+AND quarter = ${req.param.quarter}
+),
+all_fares AS (
+SELECT *
+FROM rt_fares
+UNION
+SELECT *
+FROM ow_rt_fares
+)
+SELECT *
+FROM all_fares
+ORDER BY ItinFare
+LIMIT 10;
+
+------------------------------------------------------
+
+Query 2.
+Description: What are the top 10 cheapest destinations (cities) via flights from a given city in a given year/quarter?
+Contribution: Tianze Chris Yi
+
+WITH rt_fares AS (
+SELECT ItinFare, b.city AS dest_city,
+FROM flight_itinerary a
+JOIN Airport b
+ON a.dest_airport_id = b.id
+WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+AND is_roundtrip
+AND NOT is_bulkfare
+AND year = ${req.param.year}
+AND quarter = ${req.param.quarter}
+),
+ow_fares AS (
+SELECT ItinFare, b.city AS dest_city
+FROM flight_itinerary a
+JOIN Airport b
+ON a.dest_airport_id = b.id
+WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+AND NOT is_roundtrip
+AND NOT is_bulkfare
+AND year = ${req.param.year}
+AND quarter = ${req.param.quarter}
+),
+ow_rt_fares AS (
+SELECT (a.ItinFare + b.ItinFare) AS ItinFare, b.dest_city
+FROM flight_itinerary a, ow_fares b
+WHERE dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+AND origin_airport_id IN (SELECT id FROM Airport WHERE city = b.dest_city)
+AND NOT is_roundtrip
+AND NOT is_bulkfare
+AND year = ${req.param.year}
+AND quarter = ${req.param.quarter}
+),
+all_fares AS (
+SELECT *
+FROM rt_fares
+UNION ALL
+SELECT *
+FROM ow_rt_fares
+)
+SELECT dest_city, AVG(ItinFare) AS avg_price
+FROM all_fares
+GROUP BY dest_city
+ORDER BY avg_price
+LIMIT 10;
+
+------------------------------------------------------
+
+Query 3.
+Description: Top 10 cheapest listings in a city given checkin/out dates and accomodation type
+Contribution: Tianze Chris Yi
+
+WITH nightly_rate AS (
+SELECT a.id, a.name, a.host_name, a.photo_url, b.date, b.price, b.is_available
+FROM Listing a
+JOIN Availability b
+ON a.id = b.listing_id
+WHERE (${req.param.checkout_date}- ${${req.param.checkin_date}) >= b.min_num_nights
+AND (${req.param.checkout_date}-${req.param.checkin_date}) <= b.max_num_nights
+AND b.date >= ${req.param.checkin_date}
+AND b.date <= ${req.param.checkout_date}
+AND a.city = ${req.param.dest_city}
+AND a.accom_type = ${req.param.accom_type}
+),
+available_nightly_rate AS (
+SELECT *
+FROM nightly_rate
+WHERE a.id NOT IN (SELECT id FROM nightly_rate WHERE NOT is_available)
+)
+SELECT id, name, host_name, photo_url, SUM(price) AS total_price
+FROM available_nightly_rate
+GROUP BY 1,2,3,4
+ORDER BY total_price
+LIMIT 10;
+
+------------------------------------------------------
+
+Query 4.
+Based on origin, destination, quarter, year, airplane budget and hotel budget range what are the cheapest recommendations?
+Contribution: Wan Ting Huang
+
+
+WITH filtered_listings AS (
+SELECT listing_id, name, date, city AS destination_city, accom_type, photo_url, price, max_num_nights, min_num_nights 
+FROM listing l 
+JOIN availability a 
+	ON l.id = a.listing_id 
+WHERE EXTRACT(date, QUARTER) = ${req.param.quarter} AND 
+	  EXTRACT(date, YEAR) = ${req.param.year} AND
+	  city = ${req.param.dest_city} AND 
+	  price BETWEEN ${req.param.min_hotel_budget} AND ${req.param.max_hotel_budget}
+),
+WITH filtered_flights AS (
+SELECT itinerary_id, itin_fare, RPCarrier, quarter, origin_country, origin_city, origin_airport_id, dest_airport_id, year
+FROM airport ai
+JOIN flight_itinerary f   
+	ON ai.id = f.itinerary_id
+WHERE ai.city = ${req.param.origin_city} AND 
+	  ai.country = ${req.param.origin_country} AND 
+	  f.quarter = ${req.param.quarter} AND 
+	  f.is_bulkfare = 0 AND
+	  year = ${req.param.year} AND
+	  f.itin_fare BETWEEN ${req.param.min_flight_budget} AND ${req.param.max_flight_budget}
+)
+SELECT f.origin_country, f.origin_city, f.origin_airport_id, f.dest_airport_id, f.RPCarrier, 
+l.destination_city, f.itin_fare AS flight_fare, l.accom_type, l.photo_url, l.price AS listing_price, l.max_num_nights, l.min_num_nights, f.itin_fare + l.price AS total_fare 
+FROM located_near ln 
+JOIN filtered_listings l
+	ON ln.listing_id = l.listing_id
+JOIN filtered_flights f
+	ON ln.airport_id = f.airport_id 
+ORDER BY total_fare
+
+
+
+------------------------------------------------------
+Query 5.
+
+Show average cheapest city to get an accom_type for a specific range of start dates and number of nights 
+Contribution: Wan Ting Huang
+ 
+
+SELECT city, average_price_per_day
+FROM (
+	SELECT city, accom_type, AVG(a.price) AS average_price_per_day 
+	FROM listing l 
+	JOIN availability a 
+		ON l.id = a.listing_id 
+	GROUP BY 1, 2
+	HAVING a.date BETWEEN ${req.param.earliest_date} AND ${req.param.latest_date} AND 
+		  ${req.param.num_nights} BETWEEN min_num_nights AND max_num_nights AND 
+		  a.is_available ='t'
+)
+WHERE accom_type = ${req.param.accomodation_type}
+ORDER BY 2 
+
+
+------------------------------------------------------
+Query 6.
+
+Best hotels in a city for price for short, medium, and long term stay
+Contribution: Wan Ting Huang
+
+WITH length_labeled AS (
+SELECT *, 
+	   CASE WHEN a.min_num_nights <= 2 THEN 'short'
+	        WHEN a.max_num_nights >= 30 THEN  'long'
+	        ELSE 'medium' END AS stay_length
+FROM listing l 
+JOIN availability a  
+	ON l.id = a.listing_id
+WHERE is_available = 't'
+)
+SELECT *
+FROM length_labeled 
+WHERE stay_length = ${req.param.length} AND 
+	  city = ${req.param.city}
+ORDER BY price
+------------------------------------------------------
+
+Other query suggestions:
+Flexible date search for flight and airbnb (+/- 3 days)
+Joining flight and airbnb by year/quarter and city: query 4
+
+
+------------------------------------------------------
+
+AWS RDS Credentials: (Worthan)
