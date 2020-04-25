@@ -1,43 +1,12 @@
 var config = require('./db-config.js');
 var mysql = require('mysql');
+var oracledb = require('oracledb');
 
-config.connectionLimit = 10;
-var connection = mysql.createConnection(config);
-
-connection.connect(function(res, err) {
-  if (err) {
-    console.error('Database connection failed: ' + err.stack);
-    return;
-  }
-
-  console.log('Connected to database.');
-  connection.end();
-});
-
-/*var connection = mysql.createPool(config);
-
-var query = `
-SELECT CITY
-FROM AIRPORT
-LIMIT 5
-`
-
-connection.query(query, function(err, rows, fields) {
-  if (err) console.log(err);
-  else {
-    console.log("HIASDOAOSDKOASKDKAOSDKOASKD");
-    console.log(rows);
-    res.json(rows);
-  }
-});*/
-
-/*var connection = mysql.createPool({
-  host     : "cis550example.cjzd6dnb6pnw.us-east-1.rds.amazonaws.com",
-  user     : "admin",
-  password : "adminpassword",
-  port     : "1521",
-  database : "TESTDB"
-});*/
+let connection;
+async function connect(){
+  connection = await oracledb.getConnection(config);
+}
+connect();
 
 /* -------------------------------------------------- */
 /* ------------------- Route Handlers --------------- */
@@ -78,12 +47,12 @@ function getCheapestFlightsOutOfCity(req, res) {
   FROM AIRPORT
   LIMIT 5
   `
+  console.log("HI");
   connection.query(query, function(err, rows, fields) {
     if (err) console.log(err);
     else {
       console.log(rows);
       res.json(rows);
-      connection.release();
     }
   });
 };

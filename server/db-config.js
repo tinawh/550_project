@@ -1,8 +1,6 @@
 // Private. Will not be included in submission
 module.exports = {
-  host     : "cis550project.csjxz8jvwxhz.us-east-1.rds.amazonaws.com",
-  port     : "1521",
+  connectString     : "cis550project.csjxz8jvwxhz.us-east-1.rds.amazonaws.com/TRAVELDB",
   user     : "admin",
-  password : "averystrongpassword",
-  database : "TRAVELDB"
+  password : "averystrongpassword"
 };
