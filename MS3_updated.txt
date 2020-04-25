@@ -145,39 +145,44 @@ Query 4.
 Based on origin, destination, quarter, year, airplane budget and hotel budget range what are the cheapest recommendations?
 Contribution: Wan Ting Huang
 
-
-WITH filtered_listings AS (
-SELECT listing_id, name, date, city AS destination_city, accom_type, photo_url, price, max_num_nights, min_num_nights 
-FROM listing l 
-JOIN availability a 
-	ON l.id = a.listing_id 
-WHERE EXTRACT(date, QUARTER) = ${req.param.quarter} AND 
-	  EXTRACT(date, YEAR) = ${req.param.year} AND
-	  city = ${req.param.dest_city} AND 
-	  price BETWEEN ${req.param.min_hotel_budget} AND ${req.param.max_hotel_budget}
+WITH a AS (SELECT is_available, listing_id, max_num_nights, min_num_nights, price, TO_DATE(availability_date,'YYYY-MM-DD') AS availability_date
+FROM availability
 ),
-WITH filtered_flights AS (
-SELECT itinerary_id, itin_fare, RPCarrier, quarter, origin_country, origin_city, origin_airport_id, dest_airport_id, year
-FROM airport ai
-JOIN flight_itinerary f   
-	ON ai.id = f.itinerary_id
-WHERE ai.city = ${req.param.origin_city} AND 
-	  ai.country = ${req.param.origin_country} AND 
+filtered_listings AS (SELECT listing_id, name, availability_date, city AS destination_city, 
+accom_type, photo_url, price, max_num_nights, min_num_nights 
+FROM a
+JOIN listing l 
+    ON a.listing_id  = l.id
+WHERE TO_CHAR(availability_date, 'Q') = ${req.param.quarter} AND 
+EXTRACT(YEAR FROM availability_date) = ${req.param.year} AND
+city = ${req.param.dest_city} AND 
+price BETWEEN ${req.param.min_hotel_budget} AND ${req.param.max_hotel_budget}
+),
+filtered_flights AS (
+SELECT itinerary_id, itin_fare, RPCarrier, quarter, c_orig.city AS origin_city, 
+    c_dest.city AS destination_city, origin_airport_id, dest_airport_id
+FROM flight_itinerary f
+JOIN airport ai_orig  
+	ON ai_orig.id = f.origin_airport_id 
+JOIN airport ai_dest
+    ON ai_dest.id = f.dest_airport_id
+JOIN citycode c_orig
+    ON ai_orig.city = c_orig.code
+JOIN citycode c_dest
+    ON ai_dest.	city = c_dest.code
+WHERE c_orig.city = ${req.param.origin_city} AND 
+      c_dest.city = ${req.param.dest_city} AND
 	  f.quarter = ${req.param.quarter} AND 
 	  f.is_bulkfare = 0 AND
-	  year = ${req.param.year} AND
+	  f.year = 2019 AND
 	  f.itin_fare BETWEEN ${req.param.min_flight_budget} AND ${req.param.max_flight_budget}
 )
-SELECT f.origin_country, f.origin_city, f.origin_airport_id, f.dest_airport_id, f.RPCarrier, 
-l.destination_city, f.itin_fare AS flight_fare, l.accom_type, l.photo_url, l.price AS listing_price, l.max_num_nights, l.min_num_nights, f.itin_fare + l.price AS total_fare 
-FROM located_near ln 
-JOIN filtered_listings l
-	ON ln.listing_id = l.listing_id
-JOIN filtered_flights f
-	ON ln.airport_id = f.airport_id 
-ORDER BY total_fare
-
-
+SELECT ff.origin_city, ff.origin_airport_id, ff.dest_airport_id, ff.RPCarrier, ff.itin_fare AS flight_fare,
+fl.destination_city, fl.accom_type, fl.photo_url, fl.price AS listing_price, fl.max_num_nights, fl.min_num_nights, ff.itin_fare + fl.price AS total_fare 
+FROM filtered_listings fl
+JOIN filtered_flights ff
+    ON ff.destination_city = fl.destination_city
+ORDER BY ff.itin_fare + fl.price;
 
 ------------------------------------------------------
 Query 5.
