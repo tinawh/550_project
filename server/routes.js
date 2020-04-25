@@ -2,59 +2,81 @@ var config = require('./db-config.js');
 var mysql = require('mysql');
 var oracledb = require('oracledb');
 
-let connection;
-async function connect(){
-  connection = await oracledb.getConnection(config);
-}
-connect();
-
 /* -------------------------------------------------- */
 /* ------------------- Route Handlers --------------- */
 /* -------------------------------------------------- */
 
 
-function getCheapestFlightsOutOfCity(req, res) {
-  // TODO: replace with real query
-  /*var query = `
-    WITH temp AS (
-      SELECT movie_id, COUNT(genre) AS count
-      FROM Genres
-      WHERE genre IN (
-        SELECT a.genre
-        FROM Genres a JOIN Movies b
-        ON a.movie_id = b.id
-        WHERE b.title = 'Inception'
-      )
-      GROUP BY movie_id
-    )
-    SELECT b.title, a.movie_id AS id, b.rating, b.vote_count
-    FROM temp a JOIN Movies b
-    ON a.movie_id = b.id
-    WHERE b.title != 'Inception' AND a.count >= (
-      SELECT COUNT(*)
-      FROM (
-          SELECT 1 AS genre
-          FROM Genres e JOIN Movies f
-          ON e.movie_id = f.id
-          WHERE f.title = 'Inception'
-      ) c
-    )
-    ORDER BY b.rating DESC, b.vote_count DESC
-    LIMIT 5
-  `;*/
+async function getCheapestFlightsOutOfCity(req, res) {
   var query = `
-  SELECT CITY
-  FROM AIRPORT
-  LIMIT 5
+  WITH rt_fares AS (
+  SELECT ItinFare, b.city AS dest_city,
+  FROM flight_itinerary a
+  JOIN Airport b
+  ON a.dest_airport_id = b.id
+  WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+  AND is_roundtrip
+  AND NOT is_bulkfare
+  AND year = ${req.param.year}
+  AND quarter = ${req.param.quarter}
+  ),
+  ow_fares AS (
+  SELECT ItinFare, b.city AS dest_city
+  FROM flight_itinerary a
+  JOIN Airport b
+  ON a.dest_airport_id = b.id
+  WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+  AND NOT is_roundtrip
+  AND NOT is_bulkfare
+  AND year = ${req.param.year}
+  AND quarter = ${req.param.quarter}
+  ),
+  ow_rt_fares AS (
+  SELECT (a.ItinFare + b.ItinFare) AS ItinFare, b.dest_city
+  FROM flight_itinerary a, ow_fares b
+  WHERE dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
+  AND origin_airport_id IN (SELECT id FROM Airport WHERE city = b.dest_city)
+  AND NOT is_roundtrip
+  AND NOT is_bulkfare
+  AND year = ${req.param.year}
+  AND quarter = ${req.param.quarter}
+  ),
+  all_fares AS (
+  SELECT *
+  FROM rt_fares
+  UNION ALL
+  SELECT *
+  FROM ow_rt_fares
+  )
+  SELECT dest_city, AVG(ItinFare) AS avg_price
+  FROM all_fares
+  GROUP BY dest_city
+  ORDER BY avg_price
+  LIMIT 10;
   `
-  console.log("HI");
-  connection.query(query, function(err, rows, fields) {
-    if (err) console.log(err);
-    else {
-      console.log(rows);
-      res.json(rows);
+  let connection;
+  try {
+    connection = await oracledb.getConnection(config);
+    binds = {};
+    const result = await connection.execute(
+      query,
+      binds,
+      {
+        maxRows: 10
+      });
+    console.log(result.rows);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error(err);
+      }
     }
-  });
+  }
 };
 
 function getCheapestAirbnbs(req, res) {
