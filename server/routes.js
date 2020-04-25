@@ -9,55 +9,26 @@ var oracledb = require('oracledb');
 
 async function getCheapestFlightsOutOfCity(req, res) {
   var query = `
-  WITH rt_fares AS (
-  SELECT ItinFare, b.city AS dest_city,
-  FROM flight_itinerary a
-  JOIN Airport b
-  ON a.dest_airport_id = b.id
-  WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
-  AND is_roundtrip
-  AND NOT is_bulkfare
-  AND year = ${req.param.year}
-  AND quarter = ${req.param.quarter}
-  ),
-  ow_fares AS (
-  SELECT ItinFare, b.city AS dest_city
-  FROM flight_itinerary a
-  JOIN Airport b
-  ON a.dest_airport_id = b.id
-  WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
-  AND NOT is_roundtrip
-  AND NOT is_bulkfare
-  AND year = ${req.param.year}
-  AND quarter = ${req.param.quarter}
-  ),
-  ow_rt_fares AS (
-  SELECT (a.ItinFare + b.ItinFare) AS ItinFare, b.dest_city
-  FROM flight_itinerary a, ow_fares b
-  WHERE dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
-  AND origin_airport_id IN (SELECT id FROM Airport WHERE city = b.dest_city)
-  AND NOT is_roundtrip
-  AND NOT is_bulkfare
-  AND year = ${req.param.year}
-  AND quarter = ${req.param.quarter}
-  ),
-  all_fares AS (
   SELECT *
-  FROM rt_fares
-  UNION ALL
-  SELECT *
-  FROM ow_rt_fares
-  )
-  SELECT dest_city, AVG(ItinFare) AS avg_price
-  FROM all_fares
-  GROUP BY dest_city
-  ORDER BY avg_price
-  LIMIT 10;
-  `
+  FROM (SELECT c_orig.city, f.year, f.quarter, c_dest.city AS destination_city, AVG(f.itin_fare) AS avg_fare_price
+  FROM flight_itinerary f
+  JOIN airport a_orig
+  	ON f.origin_airport_id = a_orig.id
+  JOIN airport a_dest
+  	ON f.dest_airport_id = a_dest.id
+  JOIN citycode c_orig
+  	ON a_orig.city = c_orig.code
+  JOIN citycode c_dest
+  	ON a_dest.city = c_dest.code
+  GROUP BY c_orig.city, f.year, f.quarter, c_dest.city
+  HAVING c_orig.city = :city AND year = :yr AND quarter = :qr
+  ORDER BY AVG(f.itin_fare))
+  WHERE ROWNUM <= 10
+  `;
   let connection;
   try {
     connection = await oracledb.getConnection(config);
-    binds = {};
+    binds = {city: "Los Angeles, CA (Metropolitan Area)", yr: 2019, qr: 1};
     const result = await connection.execute(
       query,
       binds,
