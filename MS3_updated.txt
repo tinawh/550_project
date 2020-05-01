@@ -50,51 +50,6 @@ Query 2.
 Description: What are the top 10 cheapest destinations (cities) via flights from a given city in a given year/quarter?
 Contribution: Tianze Chris Yi
 
--- WITH rt_fares AS (
--- SELECT ItinFare, b.city AS dest_city,
--- FROM flight_itinerary a
--- JOIN Airport b
--- ON a.dest_airport_id = b.id
--- WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
--- AND is_roundtrip
--- AND NOT is_bulkfare
--- AND year = ${req.param.year}
--- AND quarter = ${req.param.quarter}
--- ),
--- ow_fares AS (
--- SELECT ItinFare, b.city AS dest_city
--- FROM flight_itinerary a
--- JOIN Airport b
--- ON a.dest_airport_id = b.id
--- WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
--- AND NOT is_roundtrip
--- AND NOT is_bulkfare
--- AND year = ${req.param.year}
--- AND quarter = ${req.param.quarter}
--- ),
--- ow_rt_fares AS (
--- SELECT (a.ItinFare + b.ItinFare) AS ItinFare, b.dest_city
--- FROM flight_itinerary a, ow_fares b
--- WHERE dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
--- AND origin_airport_id IN (SELECT id FROM Airport WHERE city = b.dest_city)
--- AND NOT is_roundtrip
--- AND NOT is_bulkfare
--- AND year = ${req.param.year}
--- AND quarter = ${req.param.quarter}
--- ),
--- all_fares AS (
--- SELECT *
--- FROM rt_fares
--- UNION ALL
--- SELECT *
--- FROM ow_rt_fares
--- )
--- SELECT dest_city, AVG(ItinFare) AS avg_price
--- FROM all_fares
--- GROUP BY dest_city
--- ORDER BY avg_price
--- LIMIT 10;
-
 SELECT * 
 FROM (SELECT c_orig.city, f.year, f.quarter, c_dest.city AS destination_city, AVG(f.itin_fare) AS avg_fare_price
 FROM flight_itinerary f 
@@ -191,19 +146,25 @@ Show average cheapest city to get an accom_type for a specific range of start da
 Contribution: Wan Ting Huang
  
 
-SELECT city, average_price_per_day
-FROM (
-	SELECT city, accom_type, AVG(a.price) AS average_price_per_day 
-	FROM listing l 
-	JOIN availability a 
-		ON l.id = a.listing_id 
-	GROUP BY 1, 2
-	HAVING a.date BETWEEN ${req.param.earliest_date} AND ${req.param.latest_date} AND 
-		  ${req.param.num_nights} BETWEEN min_num_nights AND max_num_nights AND 
-		  a.is_available ='t'
+WITH a AS (SELECT is_available, listing_id, max_num_nights, min_num_nights, price, TO_DATE(availability_date,'YYYY-MM-DD') AS availability_date
+FROM availability
+),
+t AS (SELECT * 
+FROM listing l 
+JOIN a 
+    ON l.id = a.listing_id 
+WHERE a.availability_date BETWEEN TO_DATE(${req.param.earliest_date}, 'YYYY-MM-DD') AND TO_DATE(${req.param.latest_date}, 'YYYY-MM-DD') AND 
+      ${req.param.num_nights} BETWEEN min_num_nights AND max_num_nights AND 
+      a.is_available ='t'
+),
+h AS (SELECT city, accom_type, AVG(price) AS average_price_per_day 
+FROM t
+GROUP BY city, accom_type
 )
+SELECT city, average_price_per_day
+FROM h
 WHERE accom_type = ${req.param.accomodation_type}
-ORDER BY 2 
+ORDER BY average_price_per_day;
 
 
 ------------------------------------------------------
