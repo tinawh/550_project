@@ -212,21 +212,20 @@ Query 6.
 Best hotels in a city for price for short, medium, and long term stay
 Contribution: Wan Ting Huang
 
-WITH length_labeled AS (
-SELECT *, 
-	   CASE WHEN a.min_num_nights <= 2 THEN 'short'
+WITH length_labeled AS (SELECT l.id, l.name, l.photo_url, l.host_name, l.neighborhood, l.accom_type, l.city, 
+       a.availability_date, a.price, a.max_num_nights, a.min_num_nights,
+       CASE WHEN a.min_num_nights <= 2 THEN 'short'
 	        WHEN a.max_num_nights >= 30 THEN  'long'
 	        ELSE 'medium' END AS stay_length
 FROM listing l 
 JOIN availability a  
 	ON l.id = a.listing_id
-WHERE is_available = 't'
-)
+WHERE is_available = 't')
 SELECT *
 FROM length_labeled 
-WHERE stay_length = ${req.param.length} AND 
-	  city = ${req.param.city}
-ORDER BY price
+WHERE stay_length = 'long' AND
+	  city = 'San Francisco, CA (Metropolitan Area)'
+ORDER BY price;
 ------------------------------------------------------
 
 Other query suggestions:
