@@ -64,30 +64,17 @@ WHERE ROWNUM <= 10;
 Query 3.
 Description: Top 10 cheapest listings in a city given checkin/out dates and accomodation type
 Contribution: Tianze Chris Yi
-
-WITH nightly_rate AS (
-SELECT a.id, a.name, a.host_name, a.photo_url, b.date, b.price, b.is_available
-FROM Listing a
-JOIN Availability b
-ON a.id = b.listing_id
-WHERE (${req.param.checkout_date}- ${${req.param.checkin_date}) >= b.min_num_nights
-AND (${req.param.checkout_date}-${req.param.checkin_date}) <= b.max_num_nights
-AND b.date >= ${req.param.checkin_date}
-AND b.date <= ${req.param.checkout_date}
-AND a.city = ${req.param.dest_city}
-AND a.accom_type = ${req.param.accom_type}
-),
-available_nightly_rate AS (
-SELECT *
-FROM nightly_rate
-WHERE a.id NOT IN (SELECT id FROM nightly_rate WHERE NOT is_available)
-)
-SELECT id, name, host_name, photo_url, SUM(price) AS total_price
-FROM available_nightly_rate
-GROUP BY 1,2,3,4
-ORDER BY total_price
-LIMIT 10;
-
+-- fixed
+SELECT * 
+FROM (SELECT l.id, l.name, l.host_name, l.photo_url, a.price
+FROM listing l 
+JOIN availability a  
+	ON l.id = a.listing_id
+WHERE is_available = 't' AND city = ${req.param.dest_city} AND accom_type = ${req.param.accom_type} AND 
+	   TO_DATE(${req.param.checkin_date}, 'YYYY-MM-DD') = TO_DATE(availability_date, 'YYYY-MM-DD') AND 
+	   (TO_DATE(${req.param.checkout_date}, 'YYYY-MM-DD') - TO_DATE(${req.param.checkin_date}, 'YYYY-MM-DD')) BETWEEN min_num_nights AND max_num_nights
+ORDER BY price)
+WHERE ROWNUM <= 10;
 ------------------------------------------------------
 
 Query 4.
