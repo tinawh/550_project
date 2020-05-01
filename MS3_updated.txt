@@ -1,55 +1,49 @@
 Query 1.
 Description: What are the top 10 cheapest, nonbulk return flights between a pair of cities in a given year/quarter?
 Contribution: Tianze Chris Yi
-
-WITH rt_fares AS (
-SELECT ItinFare, RPCarrier AS outbound_carrier, NULL AS inbound_carrier, is_roundtrip
-FROM flight_itinerary
-WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
-AND dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.destination_city})
-AND is_roundtrip
-AND NOT is_bulkfare
-AND year = ${req.param.year}
-AND quarter = ${req.param.quarter}
+-- fixed 
+WITH temp AS (SELECT itinerary_id, rpcarrier, c_orig.city AS origin_city, c_dest.city AS dest_city, AVG(f.itin_fare) AS fare
+FROM flight_itinerary f 
+JOIN airport a_orig 
+	ON f.origin_airport_id = a_orig.id 
+JOIN airport a_dest 
+	ON f.dest_airport_id = a_dest.id 
+JOIN citycode c_orig 
+	ON a_orig.city = c_orig.code 
+JOIN citycode c_dest 
+	ON a_dest.city = c_dest.code
+GROUP BY c_orig.city, f.year, f.quarter, c_dest.city, is_bulkfare, rpcarrier, itinerary_id
+HAVING ((c_orig.city = ${req.param.origin_city} AND c_dest.city = ${req.param.destination_city}) OR 
+		(c_dest.city = ${req.param.destination_city} AND c_orig.city = ${req.param.origin_city} AND 
+		year = 2019 AND quarter = ${req.param.quarter} AND is_bulkfare = 0
 ),
-ow_fares AS (
-SELECT ItinFare, RPCarrier, is_roundtrip
-FROM flight_itinerary
-WHERE origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
-AND dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.destination_city})
-AND NOT is_roundtrip
-AND NOT is_bulkfare
-AND year = ${req.param.year}
-AND quarter = ${req.param.quarter}
-),
-ow_rt_fares AS (
-SELECT (a.ItinFare + b.ItinFare) AS ItinFare, a.RPCarrier AS outbound_carrier, b.RPCarrier AS inbound_carrier, a.is_roundtrip
-FROM flight_itinerary a, ow_fares b
-WHERE dest_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.origin_city})
-AND origin_airport_id IN (SELECT id FROM Airport WHERE city = ${req.param.destination_city})
-AND NOT is_roundtrip
-AND NOT is_bulkfare
-AND year = ${req.param.year}
-AND quarter = ${req.param.quarter}
-),
-all_fares AS (
+outward AS (SELECT *
+FROM (SELECT origin_city AS out_origin_city, dest_city AS out_dest_city, itinerary_id, rpcarrier, fare AS out_avg_fare
+FROM temp 
+WHERE origin_city = ${req.param.origin_city} AND dest_city = ${req.param.destination_city}
+ORDER BY fare)
+WHERE ROWNUM <= 10),
+return AS (SELECT *
+FROM (SELECT origin_city AS ret_origin_city, dest_city AS ret_dest_city, itinerary_id, rpcarrier, fare AS ret_avg_fare
+FROM temp 
+WHERE origin_city = ${req.param.destination_city} AND dest_city = ${req.param.origin_city}
+ORDER BY fare)
+WHERE ROWNUM <= 10),
 SELECT *
-FROM rt_fares
-UNION
-SELECT *
-FROM ow_rt_fares
-)
-SELECT *
-FROM all_fares
-ORDER BY ItinFare
-LIMIT 10;
+FROM (SELECT o.out_origin_city, o.out_dest_city, o.itinerary_id AS out_itinerary_id, o.rpcarrier AS out_rpcarrier, 
+	   r.ret_origin_city, r.ret_dest_city, r.itinerary_id AS ret_itinerary_id, r.rpcarrier AS ret_rpcarrier, out_avg_fare + ret_avg_fare AS total_fare  
+FROM outward o 
+FULL OUTER JOIN return r
+	ON o.out_origin_city = r.ret_dest_city
+ORDER BY (out_avg_fare + ret_avg_fare))
+WHERE ROWNUM <= 10;
 
 ------------------------------------------------------
 
 Query 2.
 Description: What are the top 10 cheapest destinations (cities) via flights from a given city in a given year/quarter?
 Contribution: Tianze Chris Yi
-
+-- fixed 
 SELECT * 
 FROM (SELECT c_orig.city, f.year, f.quarter, c_dest.city AS destination_city, AVG(f.itin_fare) AS avg_fare_price
 FROM flight_itinerary f 
@@ -99,7 +93,7 @@ LIMIT 10;
 Query 4.
 Based on origin, destination, quarter, year, airplane budget and hotel budget range what are the cheapest recommendations?
 Contribution: Wan Ting Huang
-
+-- fixed 
 WITH a AS (SELECT is_available, listing_id, max_num_nights, min_num_nights, price, TO_DATE(availability_date,'YYYY-MM-DD') AS availability_date
 FROM availability
 ),
@@ -144,8 +138,7 @@ Query 5.
 
 Show average cheapest city to get an accom_type for a specific range of start dates and number of nights 
 Contribution: Wan Ting Huang
- 
-
+-- fixed 
 WITH a AS (SELECT is_available, listing_id, max_num_nights, min_num_nights, price, TO_DATE(availability_date,'YYYY-MM-DD') AS availability_date
 FROM availability
 ),
@@ -169,7 +162,7 @@ ORDER BY average_price_per_day;
 
 ------------------------------------------------------
 Query 6.
-
+-- fixed 
 Best hotels in a city for price for short, medium, and long term stay
 Contribution: Wan Ting Huang
 
