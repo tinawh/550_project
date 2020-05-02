@@ -13,22 +13,22 @@ JOIN citycode c_orig
 JOIN citycode c_dest 
 	ON a_dest.city = c_dest.code
 GROUP BY c_orig.city, f.year, f.quarter, c_dest.city, is_bulkfare, rpcarrier, itinerary_id
-HAVING ((c_orig.city = ${req.param.origin_city} AND c_dest.city = ${req.param.destination_city}) OR 
-		(c_dest.city = ${req.param.destination_city} AND c_orig.city = ${req.param.origin_city} AND 
-		year = 2019 AND quarter = ${req.param.quarter} AND is_bulkfare = 0
+HAVING ((c_orig.city = 'San Francisco, CA (Metropolitan Area)' AND c_dest.city = 'New York City, NY (Metropolitan Area)') OR 
+		(c_dest.city =  'San Francisco, CA (Metropolitan Area)' AND c_orig.city = 'New York City, NY (Metropolitan Area)')) AND 
+		year = 2019 AND quarter = 1 AND is_bulkfare = 0
 ),
 outward AS (SELECT *
 FROM (SELECT origin_city AS out_origin_city, dest_city AS out_dest_city, itinerary_id, rpcarrier, fare AS out_avg_fare
 FROM temp 
-WHERE origin_city = ${req.param.origin_city} AND dest_city = ${req.param.destination_city}
+WHERE origin_city = 'San Francisco, CA (Metropolitan Area)' AND dest_city = 'New York City, NY (Metropolitan Area)'
 ORDER BY fare)
 WHERE ROWNUM <= 10),
 return AS (SELECT *
 FROM (SELECT origin_city AS ret_origin_city, dest_city AS ret_dest_city, itinerary_id, rpcarrier, fare AS ret_avg_fare
 FROM temp 
-WHERE origin_city = ${req.param.destination_city} AND dest_city = ${req.param.origin_city}
+WHERE origin_city = 'New York City, NY (Metropolitan Area)' AND dest_city = 'San Francisco, CA (Metropolitan Area)'
 ORDER BY fare)
-WHERE ROWNUM <= 10),
+WHERE ROWNUM <= 10)
 SELECT *
 FROM (SELECT o.out_origin_city, o.out_dest_city, o.itinerary_id AS out_itinerary_id, o.rpcarrier AS out_rpcarrier, 
 	   r.ret_origin_city, r.ret_dest_city, r.itinerary_id AS ret_itinerary_id, r.rpcarrier AS ret_rpcarrier, out_avg_fare + ret_avg_fare AS total_fare  
