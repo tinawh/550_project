@@ -81,6 +81,47 @@ Query 4.
 Based on origin, destination, quarter, year, airplane budget and hotel budget range what are the cheapest recommendations?
 Contribution: Wan Ting Huang
 -- fixed 
+--params 
+WITH a AS (SELECT is_available, listing_id, max_num_nights, min_num_nights, price, TO_DATE(availability_date,'YYYY-MM-DD') AS availability_date
+FROM availability
+),
+filtered_listings AS (SELECT listing_id, name, availability_date, city AS destination_city, 
+accom_type, photo_url, price, max_num_nights, min_num_nights 
+FROM a
+JOIN listing l 
+    ON a.listing_id  = l.id
+WHERE TO_CHAR(availability_date, 'Q') = 1 AND 
+EXTRACT(YEAR FROM availability_date) = 2020 AND
+city = 'San Francisco, CA (Metropolitan Area)' AND 
+price BETWEEN 0 AND 300
+),
+filtered_flights AS (
+SELECT itinerary_id, itin_fare, RPCarrier, quarter, c_orig.city AS origin_city, 
+    c_dest.city AS destination_city, origin_airport_id, dest_airport_id
+FROM flight_itinerary f
+JOIN airport ai_orig  
+	ON ai_orig.id = f.origin_airport_id 
+JOIN airport ai_dest
+    ON ai_dest.id = f.dest_airport_id
+JOIN citycode c_orig
+    ON ai_orig.city = c_orig.code
+JOIN citycode c_dest
+    ON ai_dest.	city = c_dest.code
+WHERE c_orig.city = 'Allentown/Bethlehem/Easton, PA' AND 
+      c_dest.city = 'San Francisco, CA (Metropolitan Area)' AND
+	  f.quarter = 1 AND 
+	  f.is_bulkfare = 0 AND
+	  f.year = 2019 AND
+	  f.itin_fare BETWEEN 100 AND 1000
+)
+SELECT ff.origin_city, ff.origin_airport_id, ff.dest_airport_id, ff.RPCarrier, ff.itin_fare AS flight_fare,
+fl.destination_city, fl.accom_type, fl.photo_url, fl.price AS listing_price, fl.max_num_nights, fl.min_num_nights, ff.itin_fare + fl.price AS total_fare 
+FROM filtered_listings fl
+JOIN filtered_flights ff
+    ON ff.destination_city = fl.destination_city
+ORDER BY ff.itin_fare + fl.price;
+
+--no params 
 WITH a AS (SELECT is_available, listing_id, max_num_nights, min_num_nights, price, TO_DATE(availability_date,'YYYY-MM-DD') AS availability_date
 FROM availability
 ),
